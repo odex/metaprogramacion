@@ -1,0 +1,41 @@
+8c8
+<     def __init__(self, endpoints, name, apikey, parent=None, arg=None):
+---
+>     def __init__(self, endpoints, name, apikey, parent=None):
+10c10
+<         self._arg = str(arg) if arg else None
+---
+>         self._arg = None
+20c20,21
+<                 setattr(self, name, partial(self._api_part, name))
+---
+>                 setattr(self, name,
+>                         TrelloAPI(self._ep[name], name, self._apikey, self))
+30,32d30
+<     def _api_part(self, name, arg=None):
+<         return TrelloAPI(self._ep[name], name, self._apikey, self, arg)
+<     
+37a36,40
+> 
+>     def __call__(self, arg):
+>         self._arg = str(arg)
+>     
+>         return TrelloAPI(self._ep, None, self._apikey, self)
+
+
+>>> t = TrelloAPI(ENDPOINTS['TrelloV1'], '1', 'INSERT_KEY_HERE')
+>>> t.boards.cards._url
+
+
+#----------------------------------------------------------------------
+
+La segunda aproximación al interfaz ideal usa `__call__` en lugar de
+partial con `_api_call` por 2 motivos:
+
+   1. Ganamos la habilidad de construir EPs que aceptan multiples
+      argumentos.
+   2. No necesitaremos instanciar cuando el EP no admita argumentos.
+
+
+Mola y es funcional. Peeeero aún se aceptan urls con parámetros
+incorrectos ya que en este punto no estamos validando.

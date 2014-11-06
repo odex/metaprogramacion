@@ -1,0 +1,105 @@
+3c3,6
+< from endpoints import ENDPOINTS
+---
+> import os
+> import gzip
+> from base64 import b64decode
+> import yaml
+5a9,12
+> HERE = os.path.dirname(__file__)
+> 
+> with open(os.path.join(HERE, 'endpoints.yaml'), 'rb') as ep_file:
+>     ENDPOINTS = yaml.load(ep_file.read())
+8c15
+<     def __init__(self, endpoints, name, apikey, parent=None):
+---
+>     def __init__(self, endpoints, name, apikey, parent=None, api_arg=None):
+10c17
+<         self._arg = None
+---
+>         self._arg = api_arg
+13a21,23
+> 
+>         self._allowed_args = []
+> 
+16,18c26,34
+<                 for method in content:
+<                     verb = method.lower()
+<                     setattr(self, verb, partial(self._api_call, verb))
+---
+>                 # Métodos HTTP de este endpoint.
+>                 for api_method, doc in content:
+>                     name = api_method.lower()
+>                     obj_method = partial(self._api_call, name)
+>                     obj_method.__doc__ = self._unpack_doc(doc)
+>                     setattr(self, name, obj_method)
+>             elif name.startswith('_') and name.endswith('_'):
+>                 # Argumento de la API
+>                 self._allowed_args.append(name.strip('_'))
+20,21c36,45
+<                 setattr(self, name,
+<                         TrelloAPI(self._ep[name], name, self._apikey, self))
+---
+>                 # Path parcial de la API.
+>                 next_path = TrelloAPI(endpoints=self._ep[name],
+>                 name=name,
+>                 apikey=self._apikey,
+>                 parent=self)
+>                 setattr(self, name, next_path)
+> 
+>     @staticmethod
+>     def _unpack_doc(b64):
+>         return gzip.decompress(b64decode(b64)).decode('utf-8')
+25c49,53
+<         mypart = '/'.join(filter(None, [self._name, self._arg]))
+---
+>         if self._arg:
+>             mypart = str(self._arg)
+>         else:
+>             mypart = self._name
+> 
+37,40c65,87
+<     def __call__(self, arg):
+<         self._arg = str(arg)
+<     
+<         return TrelloAPI(self._ep, None, self._apikey, self)
+---
+>     def __call__(self, **kwargs):
+>         """
+>         Se pueden consultar los parámetros disponibles mirando en
+>         `_allowed_args`.
+>         """
+>         if not kwargs:
+>             raise ValueError("A keyword argument must be provided: {}".format(
+>                                 ', '.join(self._allowed_args)))
+>         elif len(kwargs) > 1:
+>             raise ValueError("Too many arguments.")
+>         elif set(kwargs.keys()) <= set(self._allowed_args):
+>             _name, _arg = list(kwargs.items())[0]
+>             name = '_' + _name + '_'
+>             return TrelloAPI(endpoints=self._ep[name],
+>                              name=name,
+>                              apikey=self._apikey,
+>                              parent=self,
+>                              api_arg=_arg)
+>         else:
+>             raise ValueError("Unknown argument {}".format(kwargs.keys()))
+> 
+>     def __repr__(self):
+>         return 'TrelloQuery <"{}">'.format(self._url)
+
+
+>>> t = TrelloAPI(ENDPOINTS['1'], '1', 'INSERT_KEY_HERE')
+>>> t.boards.cards._url  # Falla al construirlo. Guay! Xq no existe.
+>>> t.boards(board_id=3).cards(id_card=5)
+
+
+#----------------------------------------------------------------------
+
+
+En este paso:
+
+    * Se carga desde YAML.
+    * Se inyecta la docu como docstring en los métodos.
+    * Se proporciona un allowed_args para los argumentos de la API.
+    * Todos los argumentos de la API son keyword y se validan.
